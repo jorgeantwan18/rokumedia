@@ -10,7 +10,7 @@ namespace HDPVRRecoder_W.helper
 {
     public class FileHttpLiveStreaming:HttpLiveStreaming
     {
-        private string _rootpath = "c:\\";
+        
        
         private class FileInput : BaseHelper, IFileStream,IFFMpegParameters {
             public string filename;
@@ -95,12 +95,11 @@ namespace HDPVRRecoder_W.helper
                 return this._size;
             }
         }
-        public FileHttpLiveStreaming(int port,string rootpath)
+        public FileHttpLiveStreaming(int port)
             : base(port)
         {
             
             //this.ffmpeg = new FFMpeg(new FileInput());
-            this._rootpath = rootpath;
             Log.WriteLine("HDPVRHttpLiveStreaming 初始化");
         }
         
@@ -139,13 +138,12 @@ namespace HDPVRRecoder_W.helper
                 if (e.url.EndsWith(".m3u8") && ffmpeg == null)
                 {
                     string path = e.url.Replace('/', '\\').Trim('\\');
-                    string requestpath = Path.Combine(_rootpath, path);//TODO 注意输入太多的..可能导致
-                    if (requestpath.EndsWith(".m3u8"))
+                    if (path.EndsWith(".m3u8"))
                     {
-                        requestpath = requestpath.Substring(0, requestpath.Length - ".m3u8".Length);
-                        if (File.Exists(requestpath))
+                        path = path.Substring(0, path.Length - ".m3u8".Length);
+                        if (File.Exists(path))
                         {
-                            ffmpeg = new FFMpeg(new FileInput(requestpath), e.querys["sid"]);
+                            ffmpeg = new FFMpeg(new FileInput(path), e.querys["sid"]);
                             ffmpeg.Start();
                             lock (this._transcodingInstance)
                             {
