@@ -256,10 +256,10 @@ namespace HDPVRRecoder_W
 
         private void buttonStartRoku_Click(object sender, EventArgs e)
         {
-            FileHttpLiveStreaming fls = new FileHttpLiveStreaming(90, textBoxrokuRoot.Text);
+            FileHttpLiveStreaming fls = new FileHttpLiveStreaming(90);
             fls.Start();
 
-            RokuFileServer roku = new RokuFileServer(89, textBoxrokuRoot.Text);
+            RokuFileServer roku = new RokuFileServer(89,90, textBoxrokuRoot.Text);
             roku.Start();
         }
 

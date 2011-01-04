@@ -10,11 +10,19 @@ namespace HDPVRRecoder_W.helper
     public class RokuFileServer:BaseHelper
     {
         private HttpServer server;
-        private string _rootpath = "c:\\";
-        public RokuFileServer(int port,string rootpath)
+        private int _hlsport;
+        private List<string> _roots;
+        //private string _rootpath = "c:\\";
+        public RokuFileServer(int port,int hlsport,string rootpath)
         {
             this.server = new HttpServer(port);
-            this._rootpath = rootpath;
+            this._hlsport = hlsport;
+            //this._rootpath = rootpath;
+            this._roots = new List<string>();
+            foreach (string s in rootpath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                this._roots.Add(s);
+            }
         }
         public override void Start()
         {
@@ -31,10 +39,9 @@ namespace HDPVRRecoder_W.helper
         void server_HttpConnectionEvent(object sender, HttpServer.HttpConnectionEventArgs e)
         {
             string path = e.url.Replace('/', '\\').Trim('\\');
-            string requestpath = Path.Combine(_rootpath,path);//TODO 注意输入太多的..可能导致
-            if (requestpath.EndsWith(".m3u8"))
+            if (path.EndsWith(".m3u8"))
             {
-                string file = requestpath.Substring(0, requestpath.Length - ".m3u8".Length);
+                string file = path.Substring(0, path.Length - ".m3u8".Length);
                 if (File.Exists(file))
                 {
                     e.responseCode = System.Net.HttpStatusCode.OK;
@@ -45,17 +52,17 @@ namespace HDPVRRecoder_W.helper
                     e.responseHeaders.Add("Connection", "Close");
                     string respbody = @"#EXTM3U 
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=800000
-http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/" + file.Substring(_rootpath.Length).Replace('\\', '/').Trim('/') + ".m3u8?sid=" + (e.querys.ContainsKey("sid") ? e.querys["sid"]:Guid.NewGuid().ToString("N"));
+http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":" + this._hlsport + "/" + path.Replace('\\', '/').Trim('/') + "?sid=" + (e.querys.ContainsKey("sid") ? e.querys["sid"] : Guid.NewGuid().ToString("N"));
                     e.responseBody = Encoding.UTF8.GetBytes(respbody);
                     return;
                 }
             }
             XmlDocument doc = new XmlDocument();
             doc.LoadXml("<?xml version=\"1.0\" encoding=\"utf-8\"?><root></root>");
-            if (Directory.Exists(requestpath))
+
+            if (path == "")
             {
-                DirectoryInfo dir = new DirectoryInfo(requestpath);
-                DirectoryInfo[] subdirs = dir.GetDirectories();
+#if SUPPORTTV
                 {
                     XmlElement element = doc.CreateElement("tv");
                     XmlAttribute attribute;
@@ -72,16 +79,34 @@ http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/" + file.Substring
                     element.InnerXml = RokuEncode(u);
                     doc.DocumentElement.AppendChild(element);
                 }
+#endif
+                foreach (string s in this._roots)
+                {
+                    XmlElement element = doc.CreateElement("folder");
+                    XmlAttribute attribute;
+                    attribute = doc.CreateAttribute("name");
+                    attribute.Value = s;
+                    element.Attributes.Append(attribute);
+                    string u = "http://" + e.headers["Host"] + "/" + s.Replace('\\', '/').Trim('/');
+                    element.InnerXml = RokuEncode(u);
+                    doc.DocumentElement.AppendChild(element);
+                }
+            }
+            else if (Directory.Exists(path))
+            {
+                DirectoryInfo dir = new DirectoryInfo(path);
+                DirectoryInfo[] subdirs = dir.GetDirectories();
+
                 foreach (DirectoryInfo subdir in subdirs)
                 {
-                    if (subdir.Name[0] == '$')
+                    if (subdir.Name[0] == '$' || subdir.Name.ToUpper() == "RECYCLER" || subdir.Name.ToUpper() == "System Volume Information")
                         continue;
                     XmlElement element = doc.CreateElement("folder");
                     XmlAttribute attribute;
                     attribute = doc.CreateAttribute("name");
                     attribute.Value = subdir.Name;
                     element.Attributes.Append(attribute);
-                    string u = "http://" + e.headers["Host"] + "/" + subdir.FullName.Substring(_rootpath.Length).Replace('\\', '/').Trim('/');
+                    string u = "http://" + e.headers["Host"] + "/" + subdir.FullName.Replace('\\', '/').Trim('/');
                     element.InnerXml = RokuEncode(u);
                     doc.DocumentElement.AppendChild(element);
 
@@ -105,21 +130,20 @@ http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/" + file.Substring
                     attribute.Value = "hls";
                     element.Attributes.Append(attribute);
                     string sid = Guid.NewGuid().ToString("N");
-                    //string u = "http://" + Regex.Replace(e.headers["Host"],":.*","") + ":90/" + subfile.FullName.Substring(_rootpath.Length).Replace('\\', '/').Trim('/') + ".m3u8";
-                    string u = "http://" + e.headers["Host"] + "/" + subfile.FullName.Substring(_rootpath.Length).Replace('\\', '/').Trim('/') + ".m3u8?sid=" + sid;
+                    string u = "http://" + e.headers["Host"] + "/" + subfile.FullName.Replace('\\', '/').Trim('/') + ".m3u8?sid=" + sid;
                     element.InnerXml = RokuEncode(u);
 
-                    string stopurl = "http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/action?sid=" + sid + "&action=stop";
+                    string stopurl = "http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":" + this._hlsport + "/action?sid=" + sid + "&action=stop";
                     attribute = doc.CreateAttribute("stopurl");
                     attribute.Value = stopurl;
                     element.Attributes.Append(attribute);
 
-                    string pauseurl = "http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/action?sid=" + sid + "&action=pause";
+                    string pauseurl = "http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":" + this._hlsport + "/action?sid=" + sid + "&action=pause";
                     attribute = doc.CreateAttribute("pauseurl");
                     attribute.Value = pauseurl;
                     element.Attributes.Append(attribute);
 
-                    string resumeurl = "http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/action?sid=" + sid + "&action=resume";
+                    string resumeurl = "http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":" + this._hlsport + "/action?sid=" + sid + "&action=resume";
                     attribute = doc.CreateAttribute("resumeurl");
                     attribute.Value = resumeurl;
                     element.Attributes.Append(attribute);
@@ -127,24 +151,30 @@ http://" + Regex.Replace(e.headers["Host"], ":.*", "") + ":90/" + file.Substring
                     doc.DocumentElement.AppendChild(element);
 
                 }
-                e.responseCode = System.Net.HttpStatusCode.OK;
-                e.responseDesc = "OK";
+            }
+            else
+            {
+            onerror:
+                e.responseCode = System.Net.HttpStatusCode.NotFound;
+                e.responseDesc = "Not Found";
                 e.responseHeaders = new Dictionary<string, string>();
                 e.responseHeaders.Add("Server", "Cute Server");
-                e.responseHeaders.Add("Content-Type", "text/xml");
                 e.responseHeaders.Add("Connection", "Close");
-                MemoryStream ms = new MemoryStream();
-                doc.Save(ms);
-                e.responseBody = ms.ToArray();
-                ms.Close();
+                e.responseBody = new byte[] { };
                 return;
             }
-            e.responseCode = System.Net.HttpStatusCode.NotFound;
-            e.responseDesc = "Not Found";
+            e.responseCode = System.Net.HttpStatusCode.OK;
+            e.responseDesc = "OK";
             e.responseHeaders = new Dictionary<string, string>();
             e.responseHeaders.Add("Server", "Cute Server");
+            e.responseHeaders.Add("Content-Type", "text/xml");
             e.responseHeaders.Add("Connection", "Close");
-            e.responseBody = new byte[] { };
+            MemoryStream ms = new MemoryStream();
+            doc.Save(ms);
+            e.responseBody = ms.ToArray();
+            ms.Close();
+            return;
+
         }
         protected override void Run()
         {
