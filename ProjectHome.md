@@ -1,0 +1,2 @@
+roku media is a product for roku to play video files on local lan. it support realtime HLS(http live streaming) transcoding for roku.
+for video files do not have to transcoding, this will deliever to roku player by using HLS protocol. or direct http deliever if roku can support.
